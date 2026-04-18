@@ -1,0 +1,49 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-and-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run Tests with Coverage
+        run: |
+          cd practice-8
+          docker compose up -d
+          sleep 3
+          go test -v -tags=integration -coverprofile=coverage.out ./...
+          # Remove mock file from coverage
+          grep -v "mock_user_repository.go" coverage.out > coverage.temp
+          mv coverage.temp coverage.out
+          docker compose down
+
+      - name: Check Coverage Threshold
+        run: |
+          cd practice-8
+          COVERAGE=$(go tool cover -func=coverage.out | grep total: | awk '{print $3}' | tr -d '%')
+          echo "Total Coverage: $COVERAGE%"
+          if awk "BEGIN {exit !($COVERAGE < 80.0)}"; then
+            echo "Coverage is below 80% ($COVERAGE%). Failing build."
+            exit 1
+          fi
+
+      - name: Fake Deploy
+        if: success()
+        run: |
+          echo "All tests passed and coverage is sufficient."
+          echo "Deploying to production..."
+          echo "Deployment successful."
